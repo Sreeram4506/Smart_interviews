@@ -508,6 +508,149 @@ button, input, textarea { font: inherit; }
   font-size: 0.85rem;
 }
 
+.field-label {
+  display: grid;
+  gap: 6px;
+  color: #5c6673;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.field-label select,
+.field-label input,
+.field-label textarea {
+  width: 100%;
+}
+
+.meal-selection-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.meal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.meal-card-date {
+  margin: 0;
+  color: #0f766e;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.meal-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.menu-option-list,
+.option-builder,
+.selection-summary-list {
+  display: grid;
+  gap: 10px;
+}
+
+.menu-option-card {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  text-align: left;
+  border: 1px solid rgba(209,250,229,0.95);
+  background: rgba(255,252,247,0.98);
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.menu-option-card strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.menu-option-card p {
+  margin: 0;
+  color: #5c6673;
+  line-height: 1.45;
+  font-size: 0.88rem;
+}
+
+.menu-option-card.selected {
+  border-color: rgba(16,185,129,0.45);
+  background: rgba(240,253,244,0.98);
+  box-shadow: 0 12px 24px rgba(16, 185, 129, 0.1);
+}
+
+.menu-select-btn,
+.ghost-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.menu-select-btn {
+  background: linear-gradient(135deg, #10b981, #14b8a6);
+  color: white;
+}
+
+.menu-select-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ghost-btn {
+  background: rgba(240,253,244,0.95);
+  color: #0f766e;
+  border: 1px solid rgba(209,250,229,0.95);
+}
+
+.option-builder-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.selection-summary-card {
+  border: 1px solid rgba(209,250,229,0.95);
+  background: rgba(255,252,247,0.98);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.selection-option-stats {
+  display: grid;
+  gap: 8px;
+}
+
+.selection-option-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(240,253,244,0.96);
+  color: #10231f;
+  font-size: 0.9rem;
+}
+
+.selection-option-stat span {
+  color: #0f766e;
+}
+
 /* ═══════════════════════════════════════════
    DESKTOP STYLES (min-width: 1024px)
    ═══════════════════════════════════════════ */
@@ -598,6 +741,8 @@ button, input, textarea { font: inherit; }
   .menu-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .feedback-item { padding: 16px; }
   .sidebar-card, .panel-card, .hero-card, .menu-card { border-radius: 24px; box-shadow: 0 24px 50px rgba(15, 23, 42, 0.08); }
+  .meal-selection-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .option-builder-row { grid-template-columns: 1fr 1fr auto; align-items: center; }
 }
 
 @media (min-width: 1440px) {
@@ -654,5 +799,19 @@ button, input, textarea { font: inherit; }
   .menu-summary-meta {
     flex-direction: column;
     gap: 4px;
+  }
+
+  .meal-selection-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-option-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .selection-option-stat {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

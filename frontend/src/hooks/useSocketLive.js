@@ -10,6 +10,8 @@ export function useSocketLive() {
     socket.on('disconnect', () => setStatus('disconnected'))
     socket.on('menu-update', (payload) => setEvents((prev) => [payload, ...prev].slice(0, 8)))
     socket.on('feedback-update', (payload) => setEvents((prev) => [payload, ...prev].slice(0, 8)))
+    socket.on('menu-plan-update', (payload) => setEvents((prev) => [payload, ...prev].slice(0, 8)))
+    socket.on('menu-selection-update', (payload) => setEvents((prev) => [payload, ...prev].slice(0, 8)))
     socket.on('announcement', (payload) => setEvents((prev) => [payload, ...prev].slice(0, 8)))
 
     return () => {
@@ -17,6 +19,8 @@ export function useSocketLive() {
       socket.off('disconnect')
       socket.off('menu-update')
       socket.off('feedback-update')
+      socket.off('menu-plan-update')
+      socket.off('menu-selection-update')
       socket.off('announcement')
     }
   }, [])

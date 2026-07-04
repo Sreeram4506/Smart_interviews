@@ -9,6 +9,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const authRoutes = require('./routes/auth');
 const menuRoutes = require('./routes/menu');
 const feedbackRoutes = require('./routes/feedback');
+const menuPlanRoutes = require('./routes/menu-plans');
 const User = require('./models/User');
 const bcrypt = require('bcryptjs');
 
@@ -74,6 +75,7 @@ mongoose
  // ── Routes ────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', menuRoutes);
+app.use('/api/menu-plans', menuPlanRoutes);
 app.use('/api/feedback', feedbackRoutes);
 
 app.get('/api/health', (_req, res) => {
@@ -95,6 +97,14 @@ io.on('connection', (socket) => {
 
   socket.on('feedback-update', (payload) => {
     io.emit('feedback-update', payload);
+  });
+
+  socket.on('menu-plan-update', (payload) => {
+    io.emit('menu-plan-update', payload);
+  });
+
+  socket.on('menu-selection-update', (payload) => {
+    io.emit('menu-selection-update', payload);
   });
 
   socket.on('announcement', (payload) => {

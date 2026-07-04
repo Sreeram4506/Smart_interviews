@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Sparkles, UtensilsCrossed, BarChart3, Bell, ShieldCheck, MessageCircleHeart, Users, LogOut, ChefHat, GraduationCap, ChevronDown, ChevronUp, CalendarDays } from 'lucide-react'
+import { Sparkles, UtensilsCrossed, BarChart3, Bell, ShieldCheck, MessageCircleHeart, Users, LogOut, ChefHat, GraduationCap, ChevronDown, ChevronUp, CalendarDays, ClipboardList, CheckCircle2, Plus } from 'lucide-react'
 import { useSocketLive } from './hooks/useSocketLive'
 import { useAuth } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -14,14 +14,38 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 /* ─── Role-based nav configs ─── */
 const studentNav = [
   { to: '/student/feedback', label: 'Feedback', icon: MessageCircleHeart },
+  { to: '/student/menu', label: 'Tomorrow Menu', icon: ClipboardList },
 ]
 
 const ownerNav = [
   { to: '/owner/overview', label: 'Overview', icon: BarChart3 },
   { to: '/owner/menu', label: 'Menu Manager', icon: UtensilsCrossed },
+  { to: '/owner/menu-selection', label: 'Menu Selection', icon: ClipboardList },
   { to: '/owner/staff', label: 'Staff View', icon: ShieldCheck },
   { to: '/owner/live', label: 'Live Feed', icon: MessageCircleHeart },
 ]
+
+const MEAL_TYPES = [
+  { value: 'breakfast', label: 'Breakfast' },
+  { value: 'lunch', label: 'Lunch' },
+  { value: 'snacks', label: 'Snacks' },
+  { value: 'dinner', label: 'Dinner' },
+]
+
+function toLocalDateString(date) {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return localDate.toISOString().slice(0, 10)
+}
+
+function getTomorrowDateString() {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return toLocalDateString(tomorrow)
+}
+
+function getMealLabel(value) {
+  return MEAL_TYPES.find((item) => item.value === value)?.label || value
+}
 
 /* ─── App Shell with role-aware sidebar ─── */
 function AppShell({ children }) {
@@ -108,6 +132,7 @@ function OverviewPage() {
 
   useEffect(() => {
     let mounted = true
+    setLoadingFeedback(true)
 
     ;(async () => {
       try {
@@ -491,6 +516,184 @@ function StudentFeedbackPage() {
   )
 }
 
+/* ─── Tomorrow Menu Page (Student only) ─── */
+function TomorrowMenuPage() {
+  const { events } = useSocketLive()
+  const [serviceDate, setServiceDate] = useState(getTomorrowDateString())
+  const [plans, setPlans] = useState([])
+  const [loadingPlans, setLoadingPlans] = useState(true)
+  const [selectedOptions, setSelectedOptions] = useState({})
+  const [submissionStatus, setSubmissionStatus] = useState({})
+
+  useEffect(() => {
+    let mounted = true
+    setLoadingPlans(true)
+
+    ;(async () => {
+      try {
+        const { data } = await api.get('/menu-plans', { params: { date: serviceDate } })
+        if (!mounted) return
+        setPlans(data.plans || [])
+        setSelectedOptions(
+          (data.plans || []).reduce((acc, plan) => {
+            if (plan?.mySelection?.selectedOptionId) {
+              acc[String(plan._id)] = String(plan.mySelection.selectedOptionId)
+            }
+            return acc
+          }, {})
+        )
+      } catch {
+        if (mounted) setPlans([])
+      } finally {
+        if (mounted) setLoadingPlans(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [serviceDate])
+
+  useEffect(() => {
+    const latestPlanEvent = events
+      .slice()
+      .reverse()
+      .find((entry) => entry?.type === 'menu-plan' && entry?.menuPlan)
+
+    if (!latestPlanEvent?.menuPlan) return
+
+    const nextPlan = latestPlanEvent.menuPlan
+    if (nextPlan.serviceDate !== serviceDate) return
+
+    setPlans((prev) => {
+      const exists = prev.some((plan) => String(plan._id) === String(nextPlan._id))
+      if (exists) {
+        return prev.map((plan) => (String(plan._id) === String(nextPlan._id) ? nextPlan : plan))
+      }
+      return [...prev, nextPlan]
+    })
+  }, [events, serviceDate])
+
+  const orderedPlans = useMemo(() => {
+    return MEAL_TYPES.map((meal) => plans.find((plan) => plan.mealType === meal.value)).filter(Boolean)
+  }, [plans])
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="content-grid">
+      <section className="hero-card compact">
+        <div>
+          <p className="eyebrow">Tomorrow's menu</p>
+          <h2>Pick one option for each meal section.</h2>
+          <p className="muted">The owner publishes breakfast, lunch, snacks, and dinner choices for tomorrow. You can select the option you prefer for each section.</p>
+        </div>
+        <div className="hero-tiles">
+          <div className="stat-card accent">
+            <span>Menu date</span>
+            <strong>{new Date(`${serviceDate}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</strong>
+          </div>
+          <div className="stat-card">
+            <span>Sections open</span>
+            <strong>{orderedPlans.length}</strong>
+          </div>
+        </div>
+      </section>
+
+      {loadingPlans ? (
+        <p className="muted" style={{ marginTop: 12 }}>
+          Loading tomorrow's menu...
+        </p>
+      ) : (
+        <section className="meal-selection-grid">
+          {MEAL_TYPES.map((meal) => {
+            const plan = orderedPlans.find((entry) => entry.mealType === meal.value)
+            const status = plan ? submissionStatus[plan._id] : null
+
+            return (
+              <article key={meal.value} className="panel-card meal-card">
+                <div className="panel-title-row">
+                  <ClipboardList size={18} />
+                  <h3>{meal.label}</h3>
+                </div>
+
+                {!plan ? (
+                  <p className="muted">The owner has not published the {meal.label.toLowerCase()} options yet.</p>
+                ) : (
+                  <>
+                    <p className="meal-card-date">{new Date(`${plan.serviceDate}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</p>
+                    <p className="meal-card-title">{plan.title || `${meal.label} options`}</p>
+                    <p className="muted">{plan.description || `Choose the ${meal.label.toLowerCase()} option you want for tomorrow.`}</p>
+
+                    <div className="menu-option-list">
+                      {plan.options.map((option) => {
+                        const isActive = String(selectedOptions[plan._id] || plan.mySelection?.selectedOptionId || '') === String(option._id)
+                        return (
+                          <button
+                            key={option._id}
+                            type="button"
+                            className={`menu-option-card ${isActive ? 'selected' : ''}`}
+                            onClick={() => setSelectedOptions((prev) => ({ ...prev, [plan._id]: String(option._id) }))}
+                          >
+                            <div>
+                              <strong>{option.label}</strong>
+                              <p>{option.description || 'No extra description provided.'}</p>
+                            </div>
+                            {isActive && <CheckCircle2 size={18} />}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <button
+                      className="menu-select-btn"
+                      disabled={!selectedOptions[plan._id]}
+                      onClick={async () => {
+                        try {
+                          const { data } = await api.post(`/menu-plans/${plan._id}/select`, {
+                            optionId: selectedOptions[plan._id],
+                          })
+                          setSubmissionStatus((prev) => ({
+                            ...prev,
+                            [plan._id]: 'Choice saved successfully.',
+                          }))
+                          if (data?.selection?.selectedOptionId) {
+                            setPlans((prev) =>
+                              prev.map((entry) =>
+                                String(entry._id) === String(plan._id)
+                                  ? {
+                                      ...entry,
+                                      mySelection: {
+                                        selectedOptionId: data.selection.selectedOptionId,
+                                        selectedOptionLabel: data.selection.selectedOptionLabel,
+                                        selectedOptionDescription: data.selection.selectedOptionDescription,
+                                      },
+                                    }
+                                  : entry
+                              )
+                            )
+                          }
+                        } catch {
+                          setSubmissionStatus((prev) => ({
+                            ...prev,
+                            [plan._id]: 'Unable to save your choice right now. Please try again.',
+                          }))
+                        }
+                      }}
+                    >
+                      Confirm choice
+                    </button>
+
+                    {status && <p className="submit-status">{status}</p>}
+                  </>
+                )}
+              </article>
+            )
+          })}
+        </section>
+      )}
+    </motion.div>
+  )
+}
+
 /* ─── Menu Manager Page (Mess Owner) ─── */
 function MenuManagerPage() {
   const { events } = useSocketLive()
@@ -670,6 +873,247 @@ function MenuManagerPage() {
   )
 }
 
+/* ─── Tomorrow Menu Planner (Mess Owner) ─── */
+function MenuSelectionPage() {
+  const { events } = useSocketLive()
+  const [serviceDate, setServiceDate] = useState(getTomorrowDateString())
+  const [mealType, setMealType] = useState('breakfast')
+  const [sectionTitle, setSectionTitle] = useState('')
+  const [sectionDescription, setSectionDescription] = useState('')
+  const [optionDrafts, setOptionDrafts] = useState([
+    { label: '', description: '' },
+    { label: '', description: '' },
+  ])
+  const [publishing, setPublishing] = useState(false)
+  const [plans, setPlans] = useState([])
+  const [loadingPlans, setLoadingPlans] = useState(true)
+  const [statusMessage, setStatusMessage] = useState('')
+
+  useEffect(() => {
+    let mounted = true
+
+    ;(async () => {
+      try {
+        const { data } = await api.get('/menu-plans/owner/summary', { params: { date: serviceDate } })
+        if (mounted) setPlans(data.plans || [])
+      } catch {
+        if (mounted) setPlans([])
+      } finally {
+        if (mounted) setLoadingPlans(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [serviceDate])
+
+  useEffect(() => {
+    const latestPlanEvent = events
+      .slice()
+      .reverse()
+      .find((entry) => entry?.type === 'menu-plan' && entry?.menuPlan)
+
+    if (!latestPlanEvent?.menuPlan) return
+    if (latestPlanEvent.menuPlan.serviceDate !== serviceDate) return
+
+    setPlans((prev) => {
+      const nextPlan = latestPlanEvent.menuPlan
+      const exists = prev.some((plan) => String(plan._id) === String(nextPlan._id))
+      if (exists) {
+        return prev.map((plan) => (String(plan._id) === String(nextPlan._id) ? nextPlan : plan))
+      }
+      return [...prev, nextPlan]
+    })
+  }, [events, serviceDate])
+
+  const groupedPlans = useMemo(() => {
+    return MEAL_TYPES.map((meal) => plans.find((plan) => plan.mealType === meal.value)).filter(Boolean)
+  }, [plans])
+
+  function updateOptionDraft(index, key, value) {
+    setOptionDrafts((prev) => prev.map((draft, draftIndex) => (draftIndex === index ? { ...draft, [key]: value } : draft)))
+  }
+
+  function addOptionDraft() {
+    setOptionDrafts((prev) => [...prev, { label: '', description: '' }])
+  }
+
+  function removeOptionDraft(index) {
+    setOptionDrafts((prev) => prev.filter((_, draftIndex) => draftIndex !== index))
+  }
+
+  async function publishPlan() {
+    const options = optionDrafts.filter((draft) => draft.label.trim())
+    if (options.length < 2) {
+      setStatusMessage('Please add at least two menu options.')
+      return
+    }
+
+    setPublishing(true)
+    setStatusMessage('')
+
+    try {
+      await api.post('/menu-plans', {
+        serviceDate,
+        mealType,
+        title: sectionTitle,
+        description: sectionDescription,
+        options,
+      })
+
+      setSectionTitle('')
+      setSectionDescription('')
+      setOptionDrafts([
+        { label: '', description: '' },
+        { label: '', description: '' },
+      ])
+      setStatusMessage('Menu section published successfully.')
+    } catch {
+      setStatusMessage('Unable to publish the menu section right now.')
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="content-grid">
+      <section className="hero-card compact">
+        <div>
+          <p className="eyebrow">Menu selection</p>
+          <h2>Create tomorrow's meal sections.</h2>
+          <p className="muted">Publish breakfast, lunch, snacks, and dinner options as separate sections so students can choose what they want.</p>
+        </div>
+        <div className="hero-tiles">
+          <div className="stat-card accent">
+            <span>Service date</span>
+            <strong>{new Date(`${serviceDate}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</strong>
+          </div>
+          <div className="stat-card">
+            <span>Sections live</span>
+            <strong>{groupedPlans.length}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="card-grid two-up">
+        <div className="panel-card">
+          <div className="panel-title-row">
+            <Plus size={18} />
+            <h3>Publish a meal section</h3>
+          </div>
+
+          <div className="form-stack">
+            <label className="field-label">
+              Service date
+              <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
+            </label>
+
+            <label className="field-label">
+              Meal section
+              <select value={mealType} onChange={(e) => setMealType(e.target.value)}>
+                {MEAL_TYPES.map((meal) => (
+                  <option key={meal.value} value={meal.value}>
+                    {meal.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field-label">
+              Section title
+              <input
+                placeholder="Example: Comfort Breakfast"
+                value={sectionTitle}
+                onChange={(e) => setSectionTitle(e.target.value)}
+              />
+            </label>
+
+            <label className="field-label">
+              Section note
+              <textarea
+                placeholder="Add a short note for students"
+                value={sectionDescription}
+                onChange={(e) => setSectionDescription(e.target.value)}
+              />
+            </label>
+
+            <div className="option-builder">
+              {optionDrafts.map((draft, index) => (
+                <div key={`option-${index}`} className="option-builder-row">
+                  <input
+                    placeholder={`Option ${index + 1} name`}
+                    value={draft.label}
+                    onChange={(e) => updateOptionDraft(index, 'label', e.target.value)}
+                  />
+                  <input
+                    placeholder="Short description"
+                    value={draft.description}
+                    onChange={(e) => updateOptionDraft(index, 'description', e.target.value)}
+                  />
+                  {optionDrafts.length > 2 && (
+                    <button type="button" className="ghost-btn" onClick={() => removeOptionDraft(index)}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              <button type="button" className="ghost-btn" onClick={addOptionDraft}>
+                Add another option
+              </button>
+            </div>
+
+            <button onClick={publishPlan} disabled={publishing}>
+              {publishing ? 'Publishing...' : 'Publish section'}
+            </button>
+
+            {statusMessage && <p className="submit-status">{statusMessage}</p>}
+          </div>
+        </div>
+
+        <div className="panel-card">
+          <div className="panel-title-row">
+            <ClipboardList size={18} />
+            <h3>Published sections</h3>
+          </div>
+          {loadingPlans ? (
+            <p className="muted">Loading sections...</p>
+          ) : groupedPlans.length === 0 ? (
+            <p className="muted">No meal sections have been published for this date yet.</p>
+          ) : (
+            <div className="selection-summary-list">
+              {groupedPlans.map((plan) => (
+                <article key={plan._id} className="selection-summary-card">
+                  <div className="menu-summary-top">
+                    <div>
+                      <p className="feedback-meta">{getMealLabel(plan.mealType)}</p>
+                      <h4>{plan.title || 'Untitled section'}</h4>
+                    </div>
+                    <span className="badge live">{plan.totalSelections || 0} choices</span>
+                  </div>
+                  <p className="feedback-desc">{plan.description || 'No section note added.'}</p>
+                  <div className="selection-option-stats">
+                    {plan.options.map((option) => {
+                      const optionCount = plan.optionCounts?.find((entry) => String(entry.optionId) === String(option._id))?.count || 0
+                      return (
+                        <div key={option._id} className="selection-option-stat">
+                          <strong>{option.label}</strong>
+                          <span>{optionCount} student{optionCount === 1 ? '' : 's'}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </motion.div>
+  )
+}
+
 /* ─── Staff View Page (Mess Owner) ─── */
 function StaffPage() {
   const { events } = useSocketLive()
@@ -751,6 +1195,11 @@ function App() {
           <AppShell><StudentFeedbackPage /></AppShell>
         </ProtectedRoute>
       } />
+      <Route path="/student/menu" element={
+        <ProtectedRoute allowedRoles={['student']}>
+          <AppShell><TomorrowMenuPage /></AppShell>
+        </ProtectedRoute>
+      } />
 
       {/* Mess Owner routes */}
       <Route path="/owner/overview" element={
@@ -761,6 +1210,11 @@ function App() {
       <Route path="/owner/menu" element={
         <ProtectedRoute allowedRoles={['mess_owner']}>
           <AppShell><MenuManagerPage /></AppShell>
+        </ProtectedRoute>
+      } />
+      <Route path="/owner/menu-selection" element={
+        <ProtectedRoute allowedRoles={['mess_owner']}>
+          <AppShell><MenuSelectionPage /></AppShell>
         </ProtectedRoute>
       } />
       <Route path="/owner/staff" element={
