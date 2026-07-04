@@ -350,6 +350,7 @@ function StudentFeedbackPage() {
   const [loadingMenus, setLoadingMenus] = useState(true)
   const [ratings, setRatings] = useState({})
   const [comments, setComments] = useState({})
+  const [submitStatus, setSubmitStatus] = useState({})
 
   useEffect(() => {
     let mounted = true
@@ -471,8 +472,10 @@ function StudentFeedbackPage() {
                       description,
                     })
                     setComments((prev) => ({ ...prev, [item._id]: '' }))
+                    setSubmitStatus((prev) => ({ ...prev, [item._id]: 'Feedback submitted successfully.' }))
                   } catch {
                     // keep the UI usable even if the network is temporarily unavailable
+                    setSubmitStatus((prev) => ({ ...prev, [item._id]: 'Unable to submit right now. Please try again.' }))
                   }
                 }}
               >
@@ -480,13 +483,7 @@ function StudentFeedbackPage() {
               </button>
             </div>
 
-            <div className="feed-list">
-              {events.slice(0, 2).map((event, index) => (
-                <div key={`${event.message}-${index}`} className="feed-item">
-                  <strong>Live</strong> <span>{event.message}</span>
-                </div>
-              ))}
-            </div>
+            {submitStatus[item._id] && <p className="submit-status">{submitStatus[item._id]}</p>}
           </div>
         </div>
       ))}
@@ -503,11 +500,50 @@ function MenuManagerPage() {
   const [quantity, setQuantity] = useState('')
   const [imagePreview, setImagePreview] = useState(null)
   const [publishing, setPublishing] = useState(false)
+  const [menus, setMenus] = useState([])
+  const [loadingMenus, setLoadingMenus] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+
+    ;(async () => {
+      try {
+        const { data } = await api.get('/auth/menu')
+        if (mounted) setMenus(data.menus || [])
+      } catch {
+        if (mounted) setMenus([])
+      } finally {
+        if (mounted) setLoadingMenus(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const lastMenuEvent = events
+      .slice()
+      .reverse()
+      .find((e) => e?.type === 'menu' && e?.menu)
+
+    if (lastMenuEvent?.menu) {
+      setMenus((prev) => {
+        const nextMenu = lastMenuEvent.menu
+        const exists = prev.some((menu) => String(menu._id) === String(nextMenu._id || nextMenu.id))
+        if (exists) {
+          return prev.map((menu) => (String(menu._id) === String(nextMenu._id || nextMenu.id) ? nextMenu : menu))
+        }
+        return [nextMenu, ...prev]
+      })
+    }
+  }, [events])
 
   async function handlePublish() {
     setPublishing(true)
     try {
-      await api.post('/auth/menu', {
+      const { data } = await api.post('/auth/menu', {
         foodName,
         description,
         category,
@@ -520,6 +556,13 @@ function MenuManagerPage() {
       setCategory('')
       setQuantity('')
       setImagePreview(null)
+      if (data?.menu) {
+        setMenus((prev) => {
+          const exists = prev.some((menu) => String(menu._id) === String(data.menu._id))
+          if (exists) return prev.map((menu) => (String(menu._id) === String(data.menu._id) ? data.menu : menu))
+          return [data.menu, ...prev]
+        })
+      }
     } catch (e) {
       // errors are handled silently for now; keep owner unblocked
       // console.error(e)
@@ -589,6 +632,38 @@ function MenuManagerPage() {
           <div className="feed-list" style={{ marginTop: 14 }}>
             {events.slice(0, 3).map((event, index) => <div key={`${event.message}-${index}`} className="feed-item"><strong>Live</strong> <span>{event.message}</span></div>)}
           </div>
+        </div>
+        <div className="panel-card wide">
+          <div className="panel-title-row">
+            <UtensilsCrossed size={18} />
+            <h3>All menu items</h3>
+          </div>
+          {loadingMenus ? (
+            <p className="muted">Loading menu items...</p>
+          ) : menus.length === 0 ? (
+            <p className="muted">No menu items have been published yet.</p>
+          ) : (
+            <div className="menu-card-grid">
+              {menus.map((item) => (
+                <article key={item._id} className="menu-summary-card">
+                  <div className="menu-summary-top">
+                    <div>
+                      <p className="feedback-meta">{new Date(item.createdAt).toLocaleDateString('en-IN')}</p>
+                      <h4>{item.name}</h4>
+                    </div>
+                    <span className={`badge ${Number(item.quantity || 0) > 0 ? 'live' : 'limited'}`}>
+                      {Number(item.quantity || 0) > 0 ? 'Live' : 'Limited'}
+                    </span>
+                  </div>
+                  <div className="menu-summary-meta">
+                    <span>{item.category || 'Uncategorized'}</span>
+                    <span>Qty {item.quantity || '0'}</span>
+                  </div>
+                  <p className="feedback-desc">{item.description || 'No description'}</p>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </motion.div>
