@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Sparkles, UtensilsCrossed, BarChart3, Bell, ShieldCheck, MessageCircleHeart, Users, LogOut, ChefHat, GraduationCap } from 'lucide-react'
+import { Sparkles, UtensilsCrossed, BarChart3, Bell, ShieldCheck, MessageCircleHeart, Users, LogOut, ChefHat, GraduationCap, ChevronDown, ChevronUp, CalendarDays } from 'lucide-react'
 import { useSocketLive } from './hooks/useSocketLive'
 import { useAuth } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage'
 import socket from './lib/socket'
 import api from './lib/api'
 import './App.css'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts'
 
 /* ─── Role-based nav configs ─── */
 const studentNav = [
@@ -101,6 +102,70 @@ function AppShell({ children }) {
 /* ─── Overview Page (Mess Owner) ─── */
 function OverviewPage() {
   const { events, status } = useSocketLive()
+  const [feedback, setFeedback] = useState([])
+  const [loadingFeedback, setLoadingFeedback] = useState(true)
+  const [openFeedbackId, setOpenFeedbackId] = useState(null)
+
+  useEffect(() => {
+    let mounted = true
+
+    ;(async () => {
+      try {
+        const { data } = await api.get('/feedback')
+        if (mounted) setFeedback(data.feedback || [])
+      } catch {
+        if (mounted) setFeedback([])
+      } finally {
+        if (mounted) setLoadingFeedback(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const feedbackStats = useMemo(() => {
+    const total = feedback.length
+    const average = total
+      ? (feedback.reduce((sum, item) => sum + Number(item.rating || 0), 0) / total).toFixed(1)
+      : '0.0'
+
+    return { total, average }
+  }, [feedback])
+
+  const sortedFeedback = useMemo(() => {
+    return [...feedback].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  }, [feedback])
+
+  const ratingChartData = useMemo(() => {
+    return [5, 4, 3, 2, 1].map((rating) => ({
+      rating: `${rating}★`,
+      count: feedback.filter((item) => Number(item.rating) === rating).length,
+    }))
+  }, [feedback])
+
+  const reviewDayData = useMemo(() => {
+    const buckets = new Map()
+    const labels = []
+
+    for (let i = 6; i >= 0; i -= 1) {
+      const date = new Date()
+      date.setDate(date.getDate() - i)
+      const label = date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+      buckets.set(label, 0)
+      labels.push(label)
+    }
+
+    feedback.forEach((item) => {
+      const label = new Date(item.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+      if (buckets.has(label)) buckets.set(label, buckets.get(label) + 1)
+    })
+
+    return labels.map((label) => ({ label, count: buckets.get(label) || 0 }))
+  }, [feedback])
+
+  const latestFeedbackRows = useMemo(() => sortedFeedback.slice(0, 5), [sortedFeedback])
 
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="content-grid">
@@ -112,16 +177,16 @@ function OverviewPage() {
         </div>
         <div className="hero-tiles">
           <div className="stat-card accent">
-            <span>Active students</span>
-            <strong>128</strong>
+            <span>Reviews logged</span>
+            <strong>{feedbackStats.total}</strong>
           </div>
           <div className="stat-card">
             <span>Avg. rating</span>
-            <strong>4.4/5</strong>
+            <strong>{feedbackStats.average}/5</strong>
           </div>
           <div className="stat-card">
-            <span>Complaints</span>
-            <strong>12</strong>
+            <span>Open reviews</span>
+            <strong>{feedbackStats.total}</strong>
           </div>
         </div>
       </section>
@@ -137,10 +202,141 @@ function OverviewPage() {
           </ul>
         </div>
         <div className="panel-card">
-          <div className="panel-title-row"><BarChart3 size={18} /><h3>Live event feed</h3></div>
-          <div className="feed-list">
-            {events.length === 0 ? <p className="muted">Waiting for live updates…</p> : events.map((event, index) => <div key={`${event.message || event.type}-${index}`} className="feed-item">{event.message || event.type}</div>)}
+          <div className="panel-title-row"><MessageCircleHeart size={18} /><h3>Student reviews by date</h3></div>
+          <div className="feedback-list">
+            {loadingFeedback ? (
+              <p className="muted">Loading student reviews...</p>
+            ) : sortedFeedback.length === 0 ? (
+              <p className="muted">No student feedback has been submitted yet.</p>
+            ) : (
+              sortedFeedback.map((item) => {
+                const isOpen = openFeedbackId === String(item._id)
+
+                return (
+                  <button
+                    key={item._id}
+                    type="button"
+                    className={`feedback-item ${isOpen ? 'open' : ''}`}
+                    onClick={() => setOpenFeedbackId(isOpen ? null : String(item._id))}
+                  >
+                    <div className="feedback-item-head">
+                      <div>
+                        <p className="feedback-meta">{item.studentName || item.studentUsername}</p>
+                        <h4>{item.menuItemName}</h4>
+                      </div>
+                      <div className="feedback-item-right">
+                        <span className="feedback-date">
+                          {new Date(item.createdAt).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </span>
+                        {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      </div>
+                    </div>
+                    <div className="star-row" aria-label={`Rating ${item.rating} out of 5`}>
+                      {'★★★★★'.split('').map((star, index) => (
+                        <span key={`${item._id}-star-${index}`} className={index < Number(item.rating) ? 'star active' : 'star'}>
+                          {star}
+                        </span>
+                      ))}
+                    </div>
+                    {isOpen && (
+                      <div className="feedback-body">
+                        <p className="feedback-desc">{item.description || 'No written description was added.'}</p>
+                      </div>
+                    )}
+                  </button>
+                )
+              })
+            )}
           </div>
+        </div>
+      </section>
+
+      <section className="card-grid analytics-grid">
+        <div className="panel-card wide">
+          <div className="panel-title-row"><BarChart3 size={18} /><h3>Reviews by rating</h3></div>
+          <div className="chart-wrap">
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={ratingChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                <XAxis dataKey="rating" tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#10b981" radius={[10, 10, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="panel-card">
+          <div className="panel-title-row"><ShieldCheck size={18} /><h3>Rating split</h3></div>
+          <div className="chart-wrap">
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie data={ratingChartData} dataKey="count" nameKey="rating" innerRadius={72} outerRadius={100} paddingAngle={3}>
+                  {ratingChartData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${entry.rating}`}
+                      fill={['#10b981', '#14b8a6', '#f59e0b', '#d97706', '#84cc16'][index]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="panel-card">
+          <div className="panel-title-row"><CalendarDays size={18} /><h3>Reviews last 7 days</h3></div>
+          <div className="chart-wrap">
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={reviewDayData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#14b8a6" radius={[10, 10, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel-card">
+        <div className="panel-title-row"><Users size={18} /><h3>Latest reviews table</h3></div>
+        <div className="table-wrap">
+          <table className="reviews-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Student</th>
+                <th>Meal</th>
+                <th>Stars</th>
+                <th>Review</th>
+              </tr>
+            </thead>
+            <tbody>
+              {latestFeedbackRows.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="table-empty">No reviews yet.</td>
+                </tr>
+              ) : (
+                latestFeedbackRows.map((item) => (
+                  <tr key={item._id}>
+                    <td>{new Date(item.createdAt).toLocaleDateString('en-IN')}</td>
+                    <td>{item.studentName || item.studentUsername}</td>
+                    <td>{item.menuItemName}</td>
+                    <td>{'★'.repeat(Number(item.rating || 0))}</td>
+                    <td>{item.description || 'No description'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
     </motion.div>
@@ -153,6 +349,7 @@ function StudentFeedbackPage() {
   const [menus, setMenus] = useState([])
   const [loadingMenus, setLoadingMenus] = useState(true)
   const [ratings, setRatings] = useState({})
+  const [comments, setComments] = useState({})
 
   useEffect(() => {
     let mounted = true
@@ -240,7 +437,7 @@ function StudentFeedbackPage() {
                       border: 'none',
                       cursor: 'pointer',
                       padding: 0,
-                      color: active ? '#FFD166' : 'rgba(255,255,255,0.35)',
+                      color: active ? '#f59e0b' : '#cbd5e1',
                       fontSize: 18,
                       lineHeight: '18px',
                     }}
@@ -250,20 +447,33 @@ function StudentFeedbackPage() {
                   </button>
                 )
               })}
-              <span style={{ marginLeft: 10, fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
+              <span style={{ marginLeft: 10, fontSize: 13, color: '#64748b' }}>
                 {Number(ratings[item._id] || 0)}/5
               </span>
             </div>
 
             <div className="comment-box">
-              <textarea placeholder="Share feedback or suggestions..." />
+              <textarea
+                placeholder="Share feedback or suggestions..."
+                value={comments[item._id] || ''}
+                onChange={(e) => setComments((prev) => ({ ...prev, [item._id]: e.target.value }))}
+              />
               <button
-                onClick={() => {
+                disabled={!Number(ratings[item._id] || 0)}
+                onClick={async () => {
                   const ratingValue = Number(ratings[item._id] || 0)
-                  socket.emit('feedback-update', {
-                    type: 'feedback',
-                    message: `${item.name} feedback received live (${ratingValue}/5)`,
-                  })
+                  const description = comments[item._id] || ''
+                  try {
+                    await api.post('/feedback', {
+                      menuItemId: item._id,
+                      menuItemName: item.name,
+                      rating: ratingValue,
+                      description,
+                    })
+                    setComments((prev) => ({ ...prev, [item._id]: '' }))
+                  } catch {
+                    // keep the UI usable even if the network is temporarily unavailable
+                  }
                 }}
               >
                 Submit Feedback
@@ -338,7 +548,7 @@ function MenuManagerPage() {
 
             <div style={{ display: 'grid', gap: 10 }}>
               <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>Attach image (optional)</span>
+                <span style={{ fontSize: 13, color: '#64748b' }}>Attach image (optional)</span>
                 <input
                   type="file"
                   accept="image/*"

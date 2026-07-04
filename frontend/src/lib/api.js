@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const API_BASE = import.meta.env.VITE_API_BASE || '/api'
+const DEFAULT_API = 'https://smart-interviewss.onrender.com/api'
+export const API_BASE = import.meta.env.VITE_API_BASE || DEFAULT_API
 
 const api = axios.create({
   baseURL: API_BASE,

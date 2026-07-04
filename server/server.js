@@ -8,6 +8,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const authRoutes = require('./routes/auth');
 const menuRoutes = require('./routes/menu');
+const feedbackRoutes = require('./routes/feedback');
 const User = require('./models/User');
 const bcrypt = require('bcryptjs');
 
@@ -73,6 +74,7 @@ mongoose
  // ── Routes ────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', menuRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'MessPulse AI API' });
